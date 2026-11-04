@@ -1,0 +1,100 @@
+---
+title: "Family Structure in Sarasota County, FL (2005–2024)"
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+library(tidyverse)
+library(scales)
+
+# Load the 20-year Sarasota County ACS 1-year dataset
+sarasota_history <- read_rds("data/sarasota_history.rds")
+
+# Reshape the household structure columns into long format using whole household counts
+family_trends <- sarasota_history |>
+  select(
+    year,
+    `Married-couple family` = married_couple_fam,
+    `Nonfamily household (living alone / roommates)` = nonfamily_households,
+    `Single-mother / female householder family` = female_householder_fam,
+    `Single-father / male householder family` = male_householder_fam
+  ) |>
+  pivot_longer(
+    cols = -year,
+    names_to = "household_type",
+    values_to = "households"
+  ) |>
+  mutate(
+    household_type = fct_reorder(household_type, households, .fun = max, .desc = TRUE)
+  )
+
+# Plot how household counts changed over the last 20 years (in whole numbers)
+ggplot(family_trends, aes(x = year, y = households, color = household_type)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = label_comma(), limits = c(0, NA)) +
+  scale_x_continuous(breaks = seq(2005, 2024, by = 3)) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title = "Twenty Years of Household & Family Structure in Sarasota County",
+    subtitle = "Total number of households by type, 2005–2024 (2020 omitted due to Census COVID-19 gap)",
+    x = "Year",
+    y = "Number of Households",
+    color = "Household Type",
+    caption = "Source: U.S. Census Bureau, 1-Year American Community Survey (Table B11001)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 10
+
+library(sf)
+
+# Load statewide Florida county data with map boundaries
+fl_counties <- read_rds("data/fl_counties.rds")
+
+# Calculate average number of children per family with children in each Florida county
+fl_kids_map <- fl_counties |>
+  mutate(
+    families_with_kids = married_with_kids + single_father_kids + single_mother_kids,
+    avg_kids = kids_under_18 / families_with_kids
+  ) |>
+  st_as_sf()
+
+# Plot Florida counties shaded by average children per family with kids, outlining Sarasota County
+ggplot(fl_kids_map) +
+  geom_sf(aes(fill = avg_kids), color = "white", linewidth = 0.25) +
+  geom_sf(
+    data = filter(fl_kids_map, GEOID == "12115"),
+    fill = NA,
+    color = "red",
+    linewidth = 0.9
+  ) +
+  scale_fill_viridis_c(
+    option = "plasma",
+    limits = c(1, 3),
+    breaks = c(1, 2, 3),
+    labels = label_number(accuracy = 1),
+    name = "Avg. Kids\nper Family"
+  ) +
+  labs(
+    title = "Average Number of Children per Family (with Kids) Across Florida Counties",
+    subtitle = "Children under 18 divided by families with children (Sarasota County outlined in red)",
+    caption = "Source: U.S. Census Bureau, 2018–2022 5-Year ACS (Tables B09001 & B11003)"
+  ) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", margin = margin(b = 4)),
+    plot.subtitle = element_text(margin = margin(b = 10))
+  )
+```
